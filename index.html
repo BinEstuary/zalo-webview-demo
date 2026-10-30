@@ -75,7 +75,8 @@ button:disabled { opacity: .5; cursor: default; }
         <li>Bấm biểu tượng <strong>[...]</strong> ở góc trên bên phải.</li>
         <li>Chọn <strong>&laquo;Mở bằng trình duyệt&raquo;</strong>.</li>
       </ol>
-      <button id="open-external">Thử mở bằng Chrome / Safari</button>
+      <button id="open-safari">Mở bằng Safari</button>
+      <button id="open-chrome" class="secondary">Mở bằng Chrome</button>
       <button id="copy-link" class="secondary">Sao chép liên kết</button>
       <button id="dismiss" class="secondary">Tiếp tục trong Zalo (chỉ chọn ảnh QR)</button>
       <p class="status" id="copy-status"></p>
@@ -122,17 +123,15 @@ const $ = id => document.getElementById(id);
 let stream = null;
 let scanning = false;
 
-function openInExternalBrowser() {
+function openInExternalBrowser(browser) {
   const url = location.href.replace(/^https?:\/\//, '');
   if (isAndroid) {
     // Intent sang Chrome. Không có browser_fallback_url để tránh vòng lặp mở lại trong Zalo.
     location.href = `intent://${url}#Intent;scheme=https;package=com.android.chrome;end`;
-  } else if (isIOS) {
-    // Ưu tiên Safari (x-safari-https://). Nếu vẫn còn ở trong Zalo sau 1.5s thì thử Chrome (googlechromes://).
+  } else if (browser === 'safari') {
     location.href = `x-safari-https://${url}`;
-    setTimeout(() => {
-      if (!document.hidden) location.href = `googlechromes://${url}`;
-    }, 1500);
+  } else {
+    location.href = `googlechromes://${url}`;
   }
 }
 
@@ -222,7 +221,10 @@ function init() {
 
   $('start-camera').addEventListener('click', startCamera);
   $('file').addEventListener('change', e => e.target.files[0] && decodeFile(e.target.files[0]));
-  $('open-external').addEventListener('click', openInExternalBrowser);
+  $('open-safari').addEventListener('click', () => openInExternalBrowser('safari'));
+  $('open-chrome').addEventListener('click', () => openInExternalBrowser('chrome'));
+  if (isAndroid) $('open-safari').hidden = true;
+  if (!isIOS && !isAndroid) $('open-chrome').hidden = true;
   $('copy-link').addEventListener('click', copyLink);
   $('dismiss').addEventListener('click', () => { $('zalo-overlay').hidden = true; });
 
@@ -231,9 +233,9 @@ function init() {
     $('zalo-banner').hidden = false;
     $('start-camera').disabled = true;
     $('camera-status').textContent = 'Camera không khả dụng trong Zalo. Mở bằng trình duyệt để quét.';
-    // Thử tự chuyển sang Chrome/Safari; thêm ?no_redirect=1 để tắt khi test
-    if (!new URLSearchParams(location.search).has('no_redirect')) {
-      setTimeout(openInExternalBrowser, 300);
+    // Chỉ tự chuyển trên Android; iOS chỉ mở khi người dùng bấm nút. Thêm ?no_redirect=1 để tắt khi test
+    if (isAndroid && !new URLSearchParams(location.search).has('no_redirect')) {
+      setTimeout(() => openInExternalBrowser('chrome'), 300);
     }
   }
 }
