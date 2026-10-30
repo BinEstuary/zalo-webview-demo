@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR Scanner · Zalo WebView demo</title>
+<style>
+:root {
+  --bg: #f5f7fa; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a;
+  --accent: #0068ff; --warn: #fff4e5; --warn-text: #7a4a00; --border: #dde2e8;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --card: #171b21; --text: #e8ecf1; --muted: #9aa5b1;
+    --accent: #4d9bff; --warn: #3a2d12; --warn-text: #ffd58a; --border: #2a3038;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --card: #171b21; --text: #e8ecf1; --muted: #9aa5b1;
+  --accent: #4d9bff; --warn: #3a2d12; --warn-text: #ffd58a; --border: #2a3038;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 480px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 8px 0 4px; }
+.sub { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; margin-bottom: 16px;
+}
+.card h2 { font-size: 16px; margin: 0 0 8px; }
+video { width: 100%; border-radius: 8px; background: #000; min-height: 200px; }
+button {
+  font: inherit; color: #fff; background: var(--accent); border: 0;
+  border-radius: 8px; padding: 10px 14px; cursor: pointer; width: 100%; margin-top: 8px;
+}
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.hint { color: var(--muted); font-size: 14px; margin: 8px 0 0; }
+.status { font-size: 14px; color: var(--muted); margin: 8px 0 0; min-height: 1.5em; }
+.result { word-break: break-all; font-family: ui-monospace, monospace; font-size: 14px; }
+.zalo-banner {
+  background: var(--warn); color: var(--warn-text); border-radius: 8px;
+  padding: 10px 12px; font-size: 14px; margin-bottom: 16px;
+}
+.env { font-size: 13px; color: var(--muted); }
+.env code { font-size: 12px; }
+#zalo-overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .6);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 10;
+}
+#zalo-overlay[hidden] { display: none; }
+#zalo-overlay .sheet {
+  background: var(--card); color: var(--text); width: 100%; max-width: 480px;
+  border-radius: 16px 16px 0 0; padding: 20px 16px 24px;
+}
+#zalo-overlay ol { padding-left: 20px; margin: 8px 0; }
+#zalo-overlay li { margin-bottom: 6px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quét mã QR</h1>
+  <p class="sub">Demo: xử lý camera khi trang được mở trong Zalo WebView</p>
+
+  <div id="zalo-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="zalo-title">
+    <div class="sheet">
+      <h2 id="zalo-title" style="font-size:18px;margin:0 0 8px">Mở bằng trình duyệt để quét mã</h2>
+      <p class="hint" style="margin:0">Trình duyệt trong Zalo không cho phép dùng camera ổn định. Vui lòng:</p>
+      <ol>
+        <li>Bấm biểu tượng <strong>[...]</strong> ở góc trên bên phải.</li>
+        <li>Chọn <strong>&laquo;Mở bằng trình duyệt&raquo;</strong>.</li>
+      </ol>
+      <button id="open-external">Thử mở bằng Chrome / Safari</button>
+      <button id="copy-link" class="secondary">Sao chép liên kết</button>
+      <button id="dismiss" class="secondary">Tiếp tục trong Zalo (chỉ chọn ảnh QR)</button>
+      <p class="status" id="copy-status"></p>
+    </div>
+  </div>
+
+  <div id="zalo-banner" class="zalo-banner" hidden>
+    Bạn đang mở trong Zalo. Camera trực tiếp đã tắt, bạn vẫn có thể chọn ảnh QR từ thư viện.
+  </div>
+
+  <section class="card" id="camera-section">
+    <h2>Quét bằng camera</h2>
+    <video id="video" playsinline muted hidden></video>
+    <button id="start-camera">Bật camera</button>
+    <p class="status" id="camera-status"></p>
+  </section>
+
+  <section class="card">
+    <h2>Chọn ảnh QR</h2>
+    <input id="file" type="file" accept="image/*" capture="environment">
+    <p class="hint">Dùng khi camera không hoạt động.</p>
+  </section>
+
+  <section class="card" id="result-section" hidden>
+    <h2>Kết quả</h2>
+    <div class="result" id="result"></div>
+  </section>
+
+  <section class="card env">
+    <h2>Môi trường (debug)</h2>
+    <div id="env"></div>
+  </section>
+</main>
+
+<script>
+const ua = navigator.userAgent || navigator.vendor || window.opera || '';
+const isZalo = /Zalo/i.test(ua);
+const isAndroid = /android/i.test(ua);
+const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+const hasDetector = 'BarcodeDetector' in window;
+const hasCamera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+const $ = id => document.getElementById(id);
+
+let stream = null;
+let scanning = false;
+
+function openInExternalBrowser() {
+  const url = location.href.replace(/^https?:\/\//, '');
+  if (isAndroid) {
+    // Intent sang Chrome. Không có browser_fallback_url để tránh vòng lặp mở lại trong Zalo.
+    location.href = `intent://${url}#Intent;scheme=https;package=com.android.chrome;end`;
+  } else if (isIOS) {
+    // Scheme của Chrome iOS cho https là googlechromes://
+    location.href = `googlechromes://${url}`;
+  }
+}
+
+async function copyLink() {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    $('copy-status').textContent = 'Đã sao chép liên kết.';
+  } catch (e) {
+    $('copy-status').textContent = 'Không sao chép được. Hãy copy địa chỉ trên thanh URL.';
+  }
+}
+
+function showResult(text) {
+  stopCamera();
+  $('result').textContent = text;
+  $('result-section').hidden = false;
+}
+
+function stopCamera() {
+  scanning = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  $('video').hidden = true;
+}
+
+async function startCamera() {
+  const status = $('camera-status');
+  if (!hasCamera) return status.textContent = 'Trình duyệt không có API camera.';
+  if (!hasDetector) return status.textContent = 'Trình duyệt chưa hỗ trợ BarcodeDetector. Hãy dùng chọn ảnh QR.';
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: false
+    });
+  } catch (e) {
+    return status.textContent = `Không mở được camera (${e.name}). Hãy kiểm tra quyền camera hoặc chọn ảnh QR.`;
+  }
+
+  const video = $('video');
+  video.srcObject = stream;
+  video.hidden = false;
+  await video.play();
+  status.textContent = 'Đưa mã QR vào khung hình...';
+
+  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  scanning = true;
+  const loop = async () => {
+    if (!scanning) return;
+    try {
+      const codes = await detector.detect(video);
+      if (codes.length) return showResult(codes[0].rawValue);
+    } catch (e) {
+      // Frame chưa sẵn sàng, thử lại ở vòng sau
+    }
+    setTimeout(loop, 150);
+  };
+  loop();
+}
+
+async function decodeFile(file) {
+  const status = $('camera-status');
+  if (!hasDetector) return status.textContent = 'Trình duyệt chưa hỗ trợ đọc QR từ ảnh.';
+  try {
+    const bitmap = await createImageBitmap(file);
+    const codes = await new BarcodeDetector({ formats: ['qr_code'] }).detect(bitmap);
+    if (codes.length) return showResult(codes[0].rawValue);
+    status.textContent = 'Không tìm thấy mã QR trong ảnh.';
+  } catch (e) {
+    status.textContent = 'Không đọc được ảnh này.';
+  }
+}
+
+function setupEnv() {
+  const rows = {
+    'Zalo WebView': isZalo ? 'có' : 'không',
+    'Hệ điều hành': isAndroid ? 'Android' : isIOS ? 'iOS' : 'khác',
+    'getUserMedia': hasCamera ? 'có' : 'không',
+    'BarcodeDetector': hasDetector ? 'có' : 'không'
+  };
+  $('env').innerHTML = Object.entries(rows)
+    .map(([k, v]) => `<div>${k}: <code>${v}</code></div>`).join('');
+}
+
+function init() {
+  setupEnv();
+
+  $('start-camera').addEventListener('click', startCamera);
+  $('file').addEventListener('change', e => e.target.files[0] && decodeFile(e.target.files[0]));
+  $('open-external').addEventListener('click', openInExternalBrowser);
+  $('copy-link').addEventListener('click', copyLink);
+  $('dismiss').addEventListener('click', () => { $('zalo-overlay').hidden = true; });
+
+  if (isZalo) {
+    $('zalo-overlay').hidden = false;
+    $('zalo-banner').hidden = false;
+    $('start-camera').disabled = true;
+    $('camera-status').textContent = 'Camera không khả dụng trong Zalo. Mở bằng trình duyệt để quét.';
+    // Thử tự chuyển sang Chrome/Safari; thêm ?no_redirect=1 để tắt khi test
+    if (!new URLSearchParams(location.search).has('no_redirect')) {
+      setTimeout(openInExternalBrowser, 300);
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
