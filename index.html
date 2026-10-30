@@ -128,8 +128,11 @@ function openInExternalBrowser() {
     // Intent sang Chrome. Không có browser_fallback_url để tránh vòng lặp mở lại trong Zalo.
     location.href = `intent://${url}#Intent;scheme=https;package=com.android.chrome;end`;
   } else if (isIOS) {
-    // Scheme của Chrome iOS cho https là googlechromes://
-    location.href = `googlechromes://${url}`;
+    // Ưu tiên Safari (x-safari-https://). Nếu vẫn còn ở trong Zalo sau 1.5s thì thử Chrome (googlechromes://).
+    location.href = `x-safari-https://${url}`;
+    setTimeout(() => {
+      if (!document.hidden) location.href = `googlechromes://${url}`;
+    }, 1500);
   }
 }
 

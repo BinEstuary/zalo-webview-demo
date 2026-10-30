@@ -5,7 +5,7 @@ Trang demo xử lý trường hợp người dùng quét QR bằng Zalo và tran
 ## Hành vi
 
 - **Phát hiện Zalo** qua User-Agent (`/Zalo/i`).
-- **Trong Zalo**: hiện overlay hướng dẫn mở bằng trình duyệt mặc định, thử tự chuyển sang Chrome (Android: `intent://`, iOS: `googlechromes://`), tắt nút bật camera trực tiếp và chỉ cho chọn ảnh QR.
+- **Trong Zalo**: hiện overlay hướng dẫn mở bằng trình duyệt mặc định, thử tự chuyển sang Chrome (Android: `intent://` sang Chrome; iOS: thử Safari `x-safari-https://` trước, nếu vẫn ở trong Zalo sau 1.5s thì thử Chrome `googlechromes://`), tắt nút bật camera trực tiếp và chỉ cho chọn ảnh QR.
 - **Ngoài Zalo**: bật camera và quét bằng `BarcodeDetector`, hoặc chọn ảnh QR từ thư viện.
 - Thêm `?no_redirect=1` vào URL để tắt tự chuyển hướng khi test.
 
